@@ -16,4 +16,7 @@ dist/
 .DS_Store
 
 # Runtime artifacts
-*.log
+*.log.venv/
+__pycache__/
+*.pyc
+
