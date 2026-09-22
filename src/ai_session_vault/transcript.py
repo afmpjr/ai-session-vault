@@ -51,13 +51,13 @@ def render_record(record: dict[str, Any]) -> str | None:
     role = message.get("role") or title or record.get("type") or "agent"
     content = _content_text(message.get("content"))
     if not content:
-        tool_use = message.get("tool_use") or (message.get("content"))
+        tool_use = message.get("tool_use")
         if isinstance(tool_use, dict) and tool_use.get("name"):
             content = f"[tool: {tool_use['name']}]"
         else:
             return None
 
-    label = str(role).replace("assistant", "assistant").strip()
+    label = str(role).strip()
     return f"{label}: {_truncate(content)}"
 
 

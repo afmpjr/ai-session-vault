@@ -1,4 +1,4 @@
-"""Reversible redaction of secrets before content is committed or exported.
+"""Reversible redaction of secrets before content is shared or published.
 
 Two complementary mechanisms:
 
@@ -6,11 +6,12 @@ Two complementary mechanisms:
   mixes of letters, digits and punctuation) even when we have no pattern for
   them. This is the "global secret filter".
 * **placeholder dictionary** — maps a secret to a deterministic ``[REDACTED:x]``
-  token. The placeholder is what gets versioned; the mapping lives outside the
-  repository in a 0600 file, so redaction is reversible for the vault owner.
+  token. The placeholder is what gets shared; the mapping can be persisted in a
+  0600 file for later restoration, so redaction is reversible for the owner.
 
-Design intent: the vault stays shareable/publishable by default; sensitive
-values are only ever present in the dictionary, never in committed JSONL.
+Model note: the vault itself keeps raw session snapshots locally (private on
+the machine by default). Redaction is the sharing gateway — run it on a copy
+before publishing or pushing so plain-text credentials never leave the machine.
 """
 
 from __future__ import annotations

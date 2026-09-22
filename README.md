@@ -14,9 +14,10 @@ asv init                       initialise a vault
 asv add --runtime claude FILE  snapshot a session into the vault
 asv commit -m "message"        commit pending changes
 asv log                        browse the vault history
+asv status                     show vault location, sessions, dirty state
 asv show SESSION_ID            render a session as readable text
 asv find QUERY                 search stored sessions
-asv secrets scan/redact        detect and redact secrets before publishing
+asv secrets scan|redact FILE   detect and redact secrets before sharing
 ```
 
 ## Why
@@ -24,10 +25,33 @@ asv secrets scan/redact        detect and redact secrets before publishing
 - Sessions are ephemeral: runtimes overwrite their JSONL files without
   warning. `asv` snapshots each change and keeps full history in git.
 - Sessions are hard to find: a vault is a searchable, grep-able store.
-- Sessions are hard to share safely: `asv` redacts secrets into reversible
-  `[REDACTED:sha]` placeholders before anything is committed or published.
-- No server, no daemon, no account, no lock-in: a vault is just a git
+- Sessions are hard to share safely: run `asv secrets redact FILE --dict D` to
+  replace secrets with reversible `[REDACTED:sha]` placeholders before anything
+  is shared or pushed. Locally the vault keeps raw snapshots — private on your
+  machine by default; redaction is the sharing gateway.
+- **No server, no daemon, no account, no lock-in** — a vault is just a git
   repository with JSONL files.
+
+## Usage at a glance
+
+```bash
+# Initialise a vault (git repo + config)
+asv init ~/.ai-session-vault
+
+# Snapshot a session file; run from inside the vault dir or pass --vault
+asv add --runtime claude ~/.claude/projects/<proj>/agent-logs/<session>.jsonl
+
+# Commit pending changes to the vault's git history
+asv commit -m "snapshot: fixed deploy script"
+
+# Explore
+asv log          # recent commits
+asv status       # session counts + dirty state
+asv find retry   # text search over stored sessions
+asv show <id>    # readable transcript
+```
+
+Full details in [`docs/01_usage.md`](docs/01_usage.md).
 
 ## Install
 

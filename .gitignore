@@ -15,8 +15,5 @@ dist/
 # OS
 .DS_Store
 
-# Runtime artifacts
-*.log.venv/
-__pycache__/
-*.pyc
-
+# Worktrees
+.wt-*/

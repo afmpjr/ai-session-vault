@@ -67,13 +67,16 @@ not required.
   tokens).
 * `secrets redact` replaces matches with deterministic `[REDACTED:<sha256:12>]`
   placeholders, so the same secret always maps to the same placeholder.
-* The secret->placeholder mapping can be persisted in a 0600 file
-  (`RedactionDict`) for later restoration. Nothing sensitive is ever committed
-  to the vault in plain text.
+* `--dict FILE` persists the secret->placeholder mapping to a JSON file
+  written with mode `0600`; the placeholder is what gets shared, and the owner
+  can restore the original text offline from the dict.
 
-This gives the "publishable but reversible" property: the vault can be shared
-or pushed to a remote without leaking credentials, and the owner can still
-restore the original text offline.
+Note on the model: a vault snapshot keeps the raw session bytes locally —
+the vault is private on your machine by default. Redaction is the *sharing
+gateway*: before you publish, push, or hand a session to someone, run
+`secrets redact` (with `--dict`) to produce a version whose secrets are
+replaced by placeholders. That keeps the optimistic "share anything" workflow
+without committing plain-text credentials to a remote.
 
 ## Vault layout
 

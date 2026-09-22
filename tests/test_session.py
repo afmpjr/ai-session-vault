@@ -54,33 +54,33 @@ class SessionParsingTests(unittest.TestCase):
         path.write_text('{"type": "user", "message": {"role": "user", "content": "one"}}\nnot json\n{}\n', encoding="utf-8")
         self.assertEqual(session.turn_count(path), 1)
 
-    def test_derive_session_id_uses_first_uuid(self) -> None:
+    def test_derive_session_id_uses_embedded_id(self) -> None:
         self.assertEqual(
-            session.derive_session_id(Path("/tmp/x.jsonl"), "OTHER", "MY-UUID"),
+            session.derive_session_id(Path("/tmp/x.jsonl"), "MY-UUID"),
             "MY-UUID",
         )
 
-    def test_derive_session_id_uses_embedded_field_value_when_no_uuid(self) -> None:
+    def test_derive_session_id_uses_embedded_id_even_with_filename(self) -> None:
         self.assertEqual(
-            session.derive_session_id(Path("/tmp/x.jsonl"), "EMBEDDED-ID", None),
+            session.derive_session_id(Path("/tmp/other-name.jsonl"), "EMBEDDED-ID"),
             "EMBEDDED-ID",
         )
 
     def test_derive_session_id_shortens_long_values(self) -> None:
         self.assertEqual(
-            session.derive_session_id(Path("/tmp/x.jsonl"), "A" * 40, None),
+            session.derive_session_id(Path("/tmp/x.jsonl"), "A" * 40),
             "A" * 24,
         )
 
     def test_derive_session_id_falls_back_to_filename_stem(self) -> None:
         path = Path("/tmp/abc-123.jsonl")
-        # Both identifiers absent -> use the sanitised filename stem.
-        self.assertEqual(session.derive_session_id(path, None, None), "abc-123")
+        # No embedded identifier -> use the sanitised filename stem.
+        self.assertEqual(session.derive_session_id(path, None), "abc-123")
 
     def test_derive_session_id_sanitises_filename_stem(self) -> None:
         path = Path("/tmp/my session/file!.jsonl")
         # Only the filename stem is used, then sanitised.
-        self.assertEqual(session.derive_session_id(path, None, None), "file-")
+        self.assertEqual(session.derive_session_id(path, None), "file-")
 
     def test_meta_snapshot_includes_source_and_counts(self) -> None:
         path = _write_sessions(

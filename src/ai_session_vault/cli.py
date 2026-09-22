@@ -15,9 +15,8 @@ from pathlib import Path
 
 from ai_session_vault import __version__
 from ai_session_vault.config import VaultConfig
-from ai_session_vault.redact import RedactionDict, Redactor
 from ai_session_vault.search import search_text
-from ai_session_vault.vault import Vault
+from ai_session_vault.vault import GitError, Vault
 
 DEFAULT_VAULT = Path("~/.ai-session-vault").expanduser()
 
@@ -36,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_add = sub.add_parser("add", help="snapshot a session file into the vault")
     p_add.add_argument("session_file", type=Path)
     p_add.add_argument("--runtime", required=True, help="e.g. claude, opencode, codex")
-    p_add.add_argument("--vault", type=Path, default=DEFAULT_VAULT)
+    p_add.add_argument("--vault", type=Path, default=None)
 
     p_commit = sub.add_parser("commit", help="commit pending vault changes")
     p_commit.add_argument("--vault", type=Path, default=None)
@@ -68,6 +67,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_scan.add_argument("--json", action="store_true")
     p_redact = sec_sub.add_parser("redact", help="redact a session file to stdout")
     p_redact.add_argument("session_file", type=Path)
+    p_redact.add_argument(
+        "--dict", type=Path, default=None,
+        help="JSON file (0600) where the secret->placeholder mapping is persisted",
+    )
 
     return parser
 
@@ -89,16 +92,20 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_add(args: argparse.Namespace) -> int:
-    vault = Vault.open(args.vault)
+    vault = _resolve_vault(args.vault)
     stored = vault.add_session(args.session_file, args.runtime)
     print(f"snapshotted session {stored.session_id} ({args.runtime})")
     return 0
 
 
 def _cmd_commit(args: argparse.Namespace) -> int:
-    vault = _resolve_vault(args.vault)
-    message = args.message or "snapshot: ai-session-vault"
-    added = vault.commit(message)
+    try:
+        vault = _resolve_vault(args.vault)
+        message = args.message or "snapshot: ai-session-vault"
+        added = vault.commit(message)
+    except GitError as exc:
+        print(f"asv: error: {exc}", file=sys.stderr)
+        return 1
     if added:
         print(f"committed {added[:8]}")
     else:
@@ -183,8 +190,13 @@ def _cmd_secrets(args: argparse.Namespace) -> int:
             print(hit)
         return 0
     if args.secrets_command == "redact":
+        from ai_session_vault.redact import Redactor
+
         text = args.session_file.read_text(encoding="utf-8", errors="replace")
-        print(Redactor().redact(text))
+        redactor = Redactor()
+        print(redactor.redact(text), end="")
+        if args.dict:
+            redactor.dictionary.save(args.dict)
         return 0
     print("asv: error: unknown secrets subcommand", file=sys.stderr)
     return 2

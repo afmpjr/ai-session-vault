@@ -60,17 +60,18 @@ def turn_count(path: Path) -> int:
     return count
 
 
-def derive_session_id(path: Path, session_id_field: str | None, first_uuid: str | None) -> str:
+def derive_session_id(path: Path, embedded_id: str | None) -> str:
     """Calculate a stable, short session identifier.
 
-    Priority: the session UUID found inside the file, then the filename
-    (minus extension), then a digest of the absolute path. The result is
-    sanitised to a safe slug.
+    Priority: a session identifier embedded in the file (first field from
+    ``SESSION_ID_FIELDS``), then the filename (minus extension). The result is
+    sanitised to a safe slug; a blank result falls back to a digest of the
+    absolute path.
     """
-    candidate = first_uuid or session_id_field
-    if candidate:
-        slug = re.sub(r"[^a-zA-Z0-9._-]", "-", candidate)
-        return slug[:24] or slug
+    if embedded_id:
+        slug = re.sub(r"[^a-zA-Z0-9._-]", "-", embedded_id)
+        if slug:
+            return slug[:24]
     base = path.stem
     slug = re.sub(r"[^a-zA-Z0-9._-]", "-", base)
     if slug:
@@ -78,22 +79,14 @@ def derive_session_id(path: Path, session_id_field: str | None, first_uuid: str 
     return hashlib.sha256(str(path.absolute()).encode("utf-8")).hexdigest()[:12]
 
 
-def _first_identifiers(path: Path) -> tuple[str | None, str | None]:
-    """Return (session_id_field, uuid_from_first_record) without a full parse."""
-    session_field: str | None = None
-    first_uuid: str | None = None
+def _first_embedded_id(path: Path) -> str | None:
+    """Return the first session identifier embedded in the file, if any."""
     for record in iter_records(path):
-        if session_field is None:
-            for key in SESSION_ID_FIELDS:
-                value = record.get(key)
-                if isinstance(value, str) and value:
-                    session_field = value
-                    break
-            if first_uuid is None:
-                first_uuid = session_field
-        if session_field is not None and first_uuid is not None:
-            break
-    return session_field, first_uuid
+        for key in SESSION_ID_FIELDS:
+            value = record.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return None
 
 
 def session_meta(path: Path, runtime: str, session_id: str) -> dict[str, Any]:
@@ -120,11 +113,10 @@ class IdentifiedSession:
 
     @classmethod
     def from_file(cls, path: Path, runtime: str) -> "IdentifiedSession":
-        field, uuid_ = _first_identifiers(path)
         return cls(
             path=path,
             runtime=runtime,
-            session_id=derive_session_id(path, field, uuid_),
+            session_id=derive_session_id(path, _first_embedded_id(path)),
         )
 
     @property
