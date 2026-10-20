@@ -17,7 +17,7 @@ asv commit -m "message"        commit pending changes
 asv log                        browse the vault history
 asv status                     show vault location, sessions, dirty state, storage
 asv show SESSION_ID            render a session as readable text
-asv find QUERY                 search stored sessions (streaming, low RAM)
+asv find QUERY                 search stored sessions, newest first (--limit N, --runtime R, --since 7d|ISO date)
 asv discover                   list session files matching configured paths
 asv config set paths.codex GLOB  override a runtime's session path glob
 asv secrets scan|redact FILE   detect and redact secrets before sharing
