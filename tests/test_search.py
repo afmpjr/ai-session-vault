@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_session_vault.search import search_file, search_text
+from ai_session_vault.search import parse_since, search_file, search_text
 
 
 def _match_indices(text: str, query: str, case_sensitive: bool = False) -> list[int]:
@@ -72,6 +72,27 @@ class SearchSessionFileTests(unittest.TestCase):
         count, snippets = search_file(path, "match", max_snippets=2)
         self.assertEqual(count, 4)
         self.assertEqual(len(snippets), 2)
+
+
+class ParseSinceTests(unittest.TestCase):
+    NOW = 1_000_000.0
+
+    def test_relative_units(self) -> None:
+        self.assertEqual(parse_since("30m", now=self.NOW), self.NOW - 1800)
+        self.assertEqual(parse_since("12h", now=self.NOW), self.NOW - 43200)
+        self.assertEqual(parse_since("7d", now=self.NOW), self.NOW - 604800)
+        self.assertEqual(parse_since("2w", now=self.NOW), self.NOW - 1209600)
+
+    def test_iso_date_is_midnight_local(self) -> None:
+        from datetime import datetime
+
+        self.assertEqual(parse_since("2026-10-01"), datetime(2026, 10, 1).timestamp())
+
+    def test_invalid_values_raise_value_error(self) -> None:
+        for bad in ("", "abc", "7", "d7", "-3d", "7 days"):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    parse_since(bad)
 
 
 if __name__ == "__main__":
