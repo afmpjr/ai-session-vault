@@ -16,7 +16,7 @@ from typing import Any
 
 from ai_session_vault import __version__
 from ai_session_vault.config import DEFAULT_STORAGE_REPACK, VaultConfig, expand_pattern
-from ai_session_vault.search import search_file, search_text
+from ai_session_vault.search import parse_since, search_file, search_text
 from ai_session_vault.vault import GitError, Vault
 
 DEFAULT_VAULT = Path("~/.ai-session-vault").expanduser()
@@ -60,6 +60,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_find.add_argument("--vault", type=Path, default=None)
     p_find.add_argument("--case-sensitive", action="store_true")
     p_find.add_argument("--json", action="store_true")
+    p_find.add_argument("--limit", type=int, default=None, help="show at most N most recent matching sessions")
+    p_find.add_argument("--runtime", default=None, help="only sessions of this runtime, e.g. claude, opencode")
+    p_find.add_argument(
+        "--since",
+        default=None,
+        help="only sessions modified since: relative (30m, 12h, 7d, 2w) or ISO date (2026-10-01)",
+    )
 
     p_secrets = sub.add_parser("secrets", help="manage the redaction dictionary")
     sec_sub = p_secrets.add_subparsers(dest="secrets_command", required=False)
@@ -291,8 +298,30 @@ def _cmd_show(args: argparse.Namespace) -> int:
 
 def _cmd_find(args: argparse.Namespace) -> int:
     vault = _resolve_vault(args.vault)
-    results: list[dict] = []
+    if args.limit is not None and args.limit < 1:
+        print("asv: error: --limit must be >= 1", file=sys.stderr)
+        return 2
+    cutoff: float | None = None
+    if args.since is not None:
+        try:
+            cutoff = parse_since(args.since)
+        except ValueError as exc:
+            print(f"asv: error: {exc}", file=sys.stderr)
+            return 2
+    candidates = []
     for stored in vault.sessions():
+        if args.runtime is not None and stored.runtime != args.runtime:
+            continue
+        mtime = stored.path.stat().st_mtime
+        if cutoff is not None and mtime < cutoff:
+            continue
+        candidates.append((mtime, stored))
+    # Most recently modified first; ties broken by session id for stable output.
+    candidates.sort(key=lambda pair: (-pair[0], pair[1].session_id))
+    results: list[dict] = []
+    for _mtime, stored in candidates:
+        if args.limit is not None and len(results) >= args.limit:
+            break
         matches, snippets = search_file(
             stored.path,
             args.query,

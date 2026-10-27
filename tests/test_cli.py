@@ -1,7 +1,12 @@
 """Unit tests for the CLI dispatcher (subcommand wiring only)."""
 
+import json
+import os
 import tempfile
+import time
 import unittest
+from datetime import datetime, timedelta
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -195,6 +200,72 @@ class CliDispatchTests(unittest.TestCase):
             result = cli.main()
         self.assertEqual(result, 0)
         self.assertIn("repacked", out.getvalue())
+
+
+class FindFilterTests(unittest.TestCase):
+    """`asv find` filters (--limit, --runtime, --since) and mtime ordering."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.vault_dir = Path(self._tmp.name) / "vault"
+        cli.Vault.init(self.vault_dir)
+        base = self.vault_dir / "sessions"
+        # (runtime, session id, age in seconds)
+        for runtime, session_id, age in [
+            ("claude", "old", 10 * 86400),
+            ("claude", "mid", 2 * 86400),
+            ("opencode", "new", 60),
+        ]:
+            runtime_dir = base / runtime
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+            path = runtime_dir / f"{session_id}.jsonl"
+            path.write_text('{"text": "needle here"}\n', encoding="utf-8")
+            stamp = time.time() - age
+            os.utime(path, (stamp, stamp))
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _find(self, *extra: str) -> tuple[int, list[dict]]:
+        out = StringIO()
+        argv = ["asv", "find", "needle", "--vault", str(self.vault_dir), "--json", *extra]
+        with patch("sys.stdout", out), patch("sys.argv", argv):
+            code = cli.main()
+        return code, (json.loads(out.getvalue()) if code == 0 else [])
+
+    def test_orders_most_recently_modified_first(self) -> None:
+        code, results = self._find()
+        self.assertEqual(code, 0)
+        self.assertEqual([r["session_id"] for r in results], ["new", "mid", "old"])
+
+    def test_limit_keeps_the_most_recent(self) -> None:
+        _, results = self._find("--limit", "2")
+        self.assertEqual([r["session_id"] for r in results], ["new", "mid"])
+
+    def test_limit_below_one_is_a_usage_error(self) -> None:
+        code, _ = self._find("--limit", "0")
+        self.assertEqual(code, 2)
+
+    def test_runtime_filter(self) -> None:
+        _, results = self._find("--runtime", "claude")
+        self.assertEqual([r["session_id"] for r in results], ["mid", "old"])
+
+    def test_since_relative_excludes_older_sessions(self) -> None:
+        _, results = self._find("--since", "3d")
+        self.assertEqual([r["session_id"] for r in results], ["new", "mid"])
+
+    def test_since_iso_date(self) -> None:
+        tomorrow = (datetime.now() + timedelta(days=1)).date().isoformat()
+        _, results = self._find("--since", tomorrow)
+        self.assertEqual(results, [])
+
+    def test_since_invalid_value_is_a_usage_error(self) -> None:
+        code, _ = self._find("--since", "yesterday-ish")
+        self.assertEqual(code, 2)
+
+    def test_filters_combine(self) -> None:
+        _, results = self._find("--runtime", "claude", "--since", "3d", "--limit", "1")
+        self.assertEqual([r["session_id"] for r in results], ["mid"])
 
 
 if __name__ == "__main__":

@@ -10,8 +10,34 @@ filesystem, alongside a streaming line-by-line file search helper.
 
 from __future__ import annotations
 
+import re
+import time
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
+
+_RELATIVE_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
+_RELATIVE = re.compile(r"^(\d+)([mhdw])$")
+
+
+def parse_since(value: str, now: float | None = None) -> float:
+    """Convert a ``--since`` value to an epoch timestamp (cutoff, inclusive).
+
+    Accepts a relative age (``30m``, ``12h``, ``7d``, ``2w``) or an ISO
+    date/datetime (``2026-10-01``, ``2026-10-01T08:30``, local time).
+    Raises ``ValueError`` with a user-facing message otherwise.
+    """
+    text = value.strip()
+    relative = _RELATIVE.match(text)
+    if relative:
+        reference = time.time() if now is None else now
+        return reference - int(relative.group(1)) * _RELATIVE_UNITS[relative.group(2)]
+    try:
+        return datetime.fromisoformat(text).timestamp()
+    except ValueError:
+        raise ValueError(
+            f"invalid --since value {value!r}: use e.g. 30m, 12h, 7d, 2w or an ISO date like 2026-10-01"
+        ) from None
 
 
 def search_text(text: str, query: str, case_sensitive: bool = False) -> Iterator[tuple[int, int]]:
