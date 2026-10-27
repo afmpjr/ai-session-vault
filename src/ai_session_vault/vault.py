@@ -177,6 +177,12 @@ class Vault:
             pass
         return False
 
+    def repack(self) -> bool:
+        """Force repack regardless of thresholds. Returns True if repacked."""
+        self._git("repack", "-adq")
+        self._git("prune-packed")
+        return True
+
     def commit(self, message: str) -> str:
         """Stage all vault changes and create a commit. Returns the SHA."""
         self._git("add", "-A")

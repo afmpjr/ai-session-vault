@@ -141,6 +141,61 @@ class CliDispatchTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn("storage:", out.getvalue())
 
+    def test_export_session_text_format(self) -> None:
+        from io import StringIO
+
+        vault_dir = self.tmp / "vault"
+        cli.Vault.init(vault_dir)
+        session_dir = vault_dir / "sessions" / "claude"
+        session_dir.mkdir(parents=True)
+        sample = session_dir / "ses_test.jsonl"
+        sample.write_text('{"type": "user", "message": {"role": "user", "content": "hello"}}\n', encoding="utf-8")
+        cli.Vault.open(vault_dir).add_session(sample, "claude")
+
+        out = StringIO()
+        with patch("sys.stdout", out), patch("sys.argv", ["asv", "export", "ses_test", "--vault", str(vault_dir)]):
+            result = cli.main()
+        self.assertEqual(result, 0)
+        self.assertIn("user: hello", out.getvalue())
+
+    def test_export_session_json_format(self) -> None:
+        from io import StringIO
+
+        vault_dir = self.tmp / "vault"
+        cli.Vault.init(vault_dir)
+        session_dir = vault_dir / "sessions" / "claude"
+        session_dir.mkdir(parents=True)
+        sample = session_dir / "ses_test.jsonl"
+        sample.write_text('{"type": "user", "message": {"role": "user", "content": "hello"}}\n', encoding="utf-8")
+        cli.Vault.open(vault_dir).add_session(sample, "claude")
+
+        out = StringIO()
+        with patch("sys.stdout", out), patch("sys.argv", ["asv", "export", "ses_test", "--vault", str(vault_dir), "--format", "json"]):
+            result = cli.main()
+        self.assertEqual(result, 0)
+        import json as _json
+        data = _json.loads(out.getvalue())
+        self.assertEqual(data["session_id"], "ses_test")
+        self.assertEqual(data["runtime"], "claude")
+
+    def test_export_missing_session_returns_error(self) -> None:
+        vault_dir = self.tmp / "vault"
+        cli.Vault.init(vault_dir)
+        with patch("sys.argv", ["asv", "export", "nonexistent", "--vault", str(vault_dir)]):
+            result = cli.main()
+        self.assertEqual(result, 1)
+
+    def test_repack_command_runs(self) -> None:
+        from io import StringIO
+
+        vault_dir = self.tmp / "vault"
+        cli.Vault.init(vault_dir)
+        out = StringIO()
+        with patch("sys.stdout", out), patch("sys.argv", ["asv", "repack", "--vault", str(vault_dir)]):
+            result = cli.main()
+        self.assertEqual(result, 0)
+        self.assertIn("repacked", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

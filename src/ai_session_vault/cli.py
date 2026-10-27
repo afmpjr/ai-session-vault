@@ -100,6 +100,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_config_get.add_argument("key", default="", nargs="?")
     p_config_get.add_argument("--vault", type=Path, default=None)
 
+    p_export = sub.add_parser("export", help="export a session to stdout")
+    p_export.add_argument("session_id")
+    p_export.add_argument("--vault", type=Path, default=None)
+    p_export.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="output format (default: text)",
+    )
+
+    p_repack = sub.add_parser("repack", help="force git repack of loose objects")
+    p_repack.add_argument("--vault", type=Path, default=None)
+
     return parser
 
 
@@ -331,6 +344,40 @@ def _cmd_secrets(args: argparse.Namespace) -> int:
     return 2
 
 
+def _cmd_export(args: argparse.Namespace) -> int:
+    from ai_session_vault.transcript import render_transcript
+
+    vault = _resolve_vault(args.vault)
+    try:
+        stored = vault.export_session(args.session_id)
+    except KeyError:
+        print(f"asv: error: no session with id {args.session_id}", file=sys.stderr)
+        return 1
+    if args.format == "json":
+        import json as _json
+
+        print(
+            _json.dumps(
+                {
+                    "session_id": stored.session_id,
+                    "runtime": stored.runtime,
+                    "path": str(stored.path),
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(render_transcript(stored.path))
+    return 0
+
+
+def _cmd_repack(args: argparse.Namespace) -> int:
+    vault = _resolve_vault(args.vault)
+    vault.repack()
+    print("repacked")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     if argv is None:
@@ -355,6 +402,8 @@ def main(argv: list[str] | None = None) -> int:
         "discover": _cmd_discover,
         "config": _cmd_config,
         "sync": _cmd_sync,
+        "export": _cmd_export,
+        "repack": _cmd_repack,
     }
     return handlers[args.command](args)
 
